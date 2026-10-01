@@ -1,2 +1,0 @@
-# goldenhisob
-hisobot
