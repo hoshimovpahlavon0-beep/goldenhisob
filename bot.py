@@ -18,7 +18,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 # O'z Telegram ID raqamingni yoz.
 # Bir nechta admin bo'lsa, vergul bilan ajrat:
 # ADMIN_IDS = [123456789, 987654321]
-ADMIN_IDS = [8338181464]
+ADMIN_IDS = [8338181464, 5106574414]
 
 DATA_FILE = "products.json"
 
