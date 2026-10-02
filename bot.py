@@ -17,7 +17,7 @@ from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-ADMIN_IDS = [8338181464]
+ADMIN_IDS = [8338181464, 5106574414]
 
 PRODUCTS_FILE = "products.json"
 CASH_FILE = "daily_reports.json"
