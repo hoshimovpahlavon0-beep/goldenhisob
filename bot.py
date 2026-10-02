@@ -98,6 +98,13 @@ def admin_menu():
             ],
             [
                 KeyboardButton(text="💸 Rasxod"),
+                KeyboardButton(text="✏️ Kassani tahrirlash"),
+            ],
+            [
+                KeyboardButton(text="✏️ Rasxodni tahrirlash"),
+                KeyboardButton(text="🗑 Rasxodni o'chirish"),
+            ],
+            [
                 KeyboardButton(text="🔒 Kassani yopish"),
             ],
             [
@@ -145,6 +152,22 @@ class OpenCash(StatesGroup):
 class Expense(StatesGroup):
     amount = State()
     note = State()
+
+
+class EditCash(StatesGroup):
+    choice = State()
+    amount = State()
+    note = State()
+
+
+class EditExpense(StatesGroup):
+    index = State()
+    amount = State()
+    note = State()
+
+
+class DeleteExpense(StatesGroup):
+    index = State()
 
 
 # ============================================================
@@ -1188,6 +1211,518 @@ async def expense_note(
         f"📝 Izoh: {note}\n\n"
         f"💸 Bugungi jami rasxod: "
         f"{cash_data[today]['expenses_total']:,.0f} so'm",
+        reply_markup=admin_menu(),
+    )
+
+
+# ============================================================
+# ✏️ KASSANI TAHRIRLASH
+# ============================================================
+
+def cash_edit_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="💵 Ochilish summasini o'zgartirish")],
+            [KeyboardButton(text="📝 Kassa izohini o'zgartirish")],
+            [KeyboardButton(text="❌ Bekor qilish")],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def get_today():
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+@dp.message(F.text == "✏️ Kassani tahrirlash")
+async def edit_cash_start(
+    message: Message,
+    state: FSMContext
+):
+    if not is_admin(message.from_user.id):
+        return
+
+    today = get_today()
+
+    if today not in cash_data:
+        await message.answer(
+            "❌ Bugungi kassa hali ochilmagan.\n\n"
+            "Avval 🔓 Kassani oching."
+        )
+        return
+
+    if cash_data[today].get("closed"):
+        await message.answer(
+            "🔒 Bugungi kassa yopilgan.\n\n"
+            "Yopilgan kassani tahrirlab bo'lmaydi."
+        )
+        return
+
+    await state.set_state(EditCash.choice)
+
+    await message.answer(
+        "✏️ KASSANI TAHRIRLASH\n\n"
+        "Nimani o'zgartirmoqchisiz?",
+        reply_markup=cash_edit_keyboard(),
+    )
+
+
+@dp.message(EditCash.choice)
+async def edit_cash_choice(
+    message: Message,
+    state: FSMContext
+):
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
+        await message.answer(
+            "❌ Tahrirlash bekor qilindi.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    today = get_today()
+
+    if today not in cash_data or cash_data[today].get("closed"):
+        await state.clear()
+        await message.answer(
+            "🔒 Kassa yopilgan yoki mavjud emas.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    if message.text == "💵 Ochilish summasini o'zgartirish":
+        await state.set_state(EditCash.amount)
+        await message.answer(
+            "💵 Yangi ochilish summasini kiriting.\n\n"
+            "Masalan: 550000",
+            reply_markup=cancel_keyboard(),
+        )
+        return
+
+    if message.text == "📝 Kassa izohini o'zgartirish":
+        await state.set_state(EditCash.note)
+        await message.answer(
+            "📝 Yangi kassa izohini kiriting.\n\n"
+            "Izoh kerak bo'lmasa: yo'q",
+            reply_markup=cancel_keyboard(),
+        )
+        return
+
+    await message.answer(
+        "❌ Tugmalardan birini tanlang.",
+        reply_markup=cash_edit_keyboard(),
+    )
+
+
+@dp.message(EditCash.amount)
+async def edit_cash_amount(
+    message: Message,
+    state: FSMContext
+):
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
+        await message.answer(
+            "❌ Tahrirlash bekor qilindi.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    try:
+        amount = float(
+            (message.text or "").replace(",", ".").strip()
+        )
+        if amount < 0:
+            raise ValueError
+    except (ValueError, TypeError):
+        await message.answer(
+            "❌ Summani to'g'ri kiriting.\n"
+            "Masalan: 550000"
+        )
+        return
+
+    today = get_today()
+
+    if today not in cash_data or cash_data[today].get("closed"):
+        await state.clear()
+        await message.answer(
+            "🔒 Kassa yopilgan yoki mavjud emas.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    cash_data[today]["opening_cash"] = amount
+
+    revenue = calculate_today_revenue()
+    expenses_total = cash_data[today].get("expenses_total", 0)
+    cash_data[today]["closing_cash"] = (
+        amount + revenue - expenses_total
+    )
+
+    save_json(CASH_FILE, cash_data)
+    await state.clear()
+
+    await message.answer(
+        "✅ Kassa ochilish summasi o'zgartirildi!\n\n"
+        f"💵 Yangi summa: {amount:,.0f} so'm\n"
+        f"💵 Hozirgi kassa oxiri: "
+        f"{cash_data[today]['closing_cash']:,.0f} so'm",
+        reply_markup=admin_menu(),
+    )
+
+
+@dp.message(EditCash.note)
+async def edit_cash_note(
+    message: Message,
+    state: FSMContext
+):
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
+        await message.answer(
+            "❌ Tahrirlash bekor qilindi.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    note = (message.text or "").strip()
+
+    if note.lower() in ["yo'q", "yoq", "-"]:
+        note = ""
+
+    today = get_today()
+
+    if today not in cash_data or cash_data[today].get("closed"):
+        await state.clear()
+        await message.answer(
+            "🔒 Kassa yopilgan yoki mavjud emas.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    cash_data[today]["note"] = note
+    save_json(CASH_FILE, cash_data)
+    await state.clear()
+
+    await message.answer(
+        "✅ Kassa izohi o'zgartirildi!\n\n"
+        f"📝 Izoh: {note or 'Izoh yo‘q'}",
+        reply_markup=admin_menu(),
+    )
+
+
+# ============================================================
+# ✏️ RASXODNI TAHRIRLASH
+# ============================================================
+
+def expense_list_text(today):
+    expenses = cash_data[today].get("expenses", [])
+
+    if not expenses:
+        return "💸 Bugungi rasxodlar mavjud emas."
+
+    text = "💸 BUGUNGI RASXODLAR\n\n"
+
+    for i, item in enumerate(expenses, 1):
+        text += (
+            f"{i}. 💸 {item.get('amount', 0):,.0f} so'm\n"
+            f"   📝 {item.get('note') or 'Izoh yo‘q'}\n"
+            f"   🕐 {item.get('time', '')}\n\n"
+        )
+
+    return text
+
+
+@dp.message(F.text == "✏️ Rasxodni tahrirlash")
+async def edit_expense_start(
+    message: Message,
+    state: FSMContext
+):
+    if not is_admin(message.from_user.id):
+        return
+
+    today = get_today()
+
+    if today not in cash_data:
+        await message.answer("❌ Avval kassani oching.")
+        return
+
+    if cash_data[today].get("closed"):
+        await message.answer(
+            "🔒 Bugungi kassa yopilgan.\n\n"
+            "Yopilgan kassadagi rasxodni tahrirlab bo'lmaydi."
+        )
+        return
+
+    expenses = cash_data[today].get("expenses", [])
+
+    if not expenses:
+        await message.answer("💸 Bugun rasxod yo'q.")
+        return
+
+    await state.set_state(EditExpense.index)
+
+    await message.answer(
+        expense_list_text(today) +
+        "\n✏️ Qaysi rasxodni tahrirlash kerak?\n"
+        "Raqamini kiriting. Masalan: 1",
+        reply_markup=cancel_keyboard(),
+    )
+
+
+@dp.message(EditExpense.index)
+async def edit_expense_index(
+    message: Message,
+    state: FSMContext
+):
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
+        await message.answer(
+            "❌ Tahrirlash bekor qilindi.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    try:
+        index = int((message.text or "").strip()) - 1
+    except ValueError:
+        await message.answer("❌ Rasxod raqamini to'g'ri kiriting.")
+        return
+
+    today = get_today()
+    expenses = cash_data.get(today, {}).get("expenses", [])
+
+    if index < 0 or index >= len(expenses):
+        await message.answer(
+            "❌ Bunday raqamli rasxod yo'q.\n"
+            "Masalan: 1"
+        )
+        return
+
+    await state.update_data(index=index)
+    await state.set_state(EditExpense.amount)
+
+    old = expenses[index]
+
+    await message.answer(
+        "💸 Yangi rasxod summasini kiriting.\n\n"
+        f"Eski summa: {old.get('amount', 0):,.0f} so'm\n\n"
+        "Masalan: 80000",
+        reply_markup=cancel_keyboard(),
+    )
+
+
+@dp.message(EditExpense.amount)
+async def edit_expense_amount(
+    message: Message,
+    state: FSMContext
+):
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
+        await message.answer(
+            "❌ Tahrirlash bekor qilindi.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    try:
+        amount = float(
+            (message.text or "").replace(",", ".").strip()
+        )
+        if amount <= 0:
+            raise ValueError
+    except (ValueError, TypeError):
+        await message.answer(
+            "❌ Summani to'g'ri kiriting.\n"
+            "Masalan: 80000"
+        )
+        return
+
+    await state.update_data(amount=amount)
+    await state.set_state(EditExpense.note)
+
+    await message.answer(
+        "📝 Yangi rasxod izohini kiriting.\n\n"
+        "Masalan: Non va mahsulot olindi",
+        reply_markup=cancel_keyboard(),
+    )
+
+
+@dp.message(EditExpense.note)
+async def edit_expense_note(
+    message: Message,
+    state: FSMContext
+):
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
+        await message.answer(
+            "❌ Tahrirlash bekor qilindi.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    note = (message.text or "").strip()
+    data = await state.get_data()
+    index = data["index"]
+    amount = data["amount"]
+
+    today = get_today()
+
+    if today not in cash_data or cash_data[today].get("closed"):
+        await state.clear()
+        await message.answer(
+            "🔒 Kassa yopilgan yoki mavjud emas.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    expenses = cash_data[today].setdefault("expenses", [])
+
+    if index < 0 or index >= len(expenses):
+        await state.clear()
+        await message.answer(
+            "❌ Rasxod topilmadi.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    expenses[index]["amount"] = amount
+    expenses[index]["note"] = note
+
+    cash_data[today]["expenses_total"] = sum(
+        float(item.get("amount", 0))
+        for item in expenses
+    )
+
+    revenue = calculate_today_revenue()
+    opening_cash = cash_data[today].get("opening_cash", 0)
+
+    cash_data[today]["closing_cash"] = (
+        opening_cash
+        + revenue
+        - cash_data[today]["expenses_total"]
+    )
+
+    save_json(CASH_FILE, cash_data)
+    await state.clear()
+
+    await message.answer(
+        "✅ RASXOD TAHRIRLANDI!\n\n"
+        f"💸 Yangi summa: {amount:,.0f} so'm\n"
+        f"📝 Izoh: {note or 'Izoh yo‘q'}\n\n"
+        f"💸 Jami rasxod: "
+        f"{cash_data[today]['expenses_total']:,.0f} so'm\n"
+        f"💵 Kassa oxiri: "
+        f"{cash_data[today]['closing_cash']:,.0f} so'm",
+        reply_markup=admin_menu(),
+    )
+
+
+# ============================================================
+# 🗑 RASXODNI O'CHIRISH
+# ============================================================
+
+@dp.message(F.text == "🗑 Rasxodni o'chirish")
+async def delete_expense_start(
+    message: Message,
+    state: FSMContext
+):
+    if not is_admin(message.from_user.id):
+        return
+
+    today = get_today()
+
+    if today not in cash_data:
+        await message.answer("❌ Avval kassani oching.")
+        return
+
+    if cash_data[today].get("closed"):
+        await message.answer(
+            "🔒 Bugungi kassa yopilgan.\n\n"
+            "Yopilgan kassadagi rasxodni o'chirib bo'lmaydi."
+        )
+        return
+
+    expenses = cash_data[today].get("expenses", [])
+
+    if not expenses:
+        await message.answer("💸 Bugun o'chirish uchun rasxod yo'q.")
+        return
+
+    await state.set_state(DeleteExpense.index)
+
+    await message.answer(
+        expense_list_text(today) +
+        "\n🗑 Qaysi rasxodni o'chirish kerak?\n"
+        "Raqamini kiriting. Masalan: 1",
+        reply_markup=cancel_keyboard(),
+    )
+
+
+@dp.message(DeleteExpense.index)
+async def delete_expense_index(
+    message: Message,
+    state: FSMContext
+):
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
+        await message.answer(
+            "❌ O'chirish bekor qilindi.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    try:
+        index = int((message.text or "").strip()) - 1
+    except ValueError:
+        await message.answer("❌ Rasxod raqamini to'g'ri kiriting.")
+        return
+
+    today = get_today()
+
+    if today not in cash_data or cash_data[today].get("closed"):
+        await state.clear()
+        await message.answer(
+            "🔒 Kassa yopilgan yoki mavjud emas.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    expenses = cash_data[today].get("expenses", [])
+
+    if index < 0 or index >= len(expenses):
+        await message.answer(
+            "❌ Bunday raqamli rasxod yo'q."
+        )
+        return
+
+    removed = expenses.pop(index)
+
+    cash_data[today]["expenses_total"] = sum(
+        float(item.get("amount", 0))
+        for item in expenses
+    )
+
+    revenue = calculate_today_revenue()
+    opening_cash = cash_data[today].get("opening_cash", 0)
+
+    cash_data[today]["closing_cash"] = (
+        opening_cash
+        + revenue
+        - cash_data[today]["expenses_total"]
+    )
+
+    save_json(CASH_FILE, cash_data)
+    await state.clear()
+
+    await message.answer(
+        "🗑 RASXOD O'CHIRILDI!\n\n"
+        f"💸 O'chirilgan summa: "
+        f"{float(removed.get('amount', 0)):,.0f} so'm\n"
+        f"📝 Izoh: "
+        f"{removed.get('note') or 'Izoh yo‘q'}\n\n"
+        f"💸 Qolgan rasxod: "
+        f"{cash_data[today]['expenses_total']:,.0f} so'm\n"
+        f"💵 Kassa oxiri: "
+        f"{cash_data[today]['closing_cash']:,.0f} so'm",
         reply_markup=admin_menu(),
     )
 
