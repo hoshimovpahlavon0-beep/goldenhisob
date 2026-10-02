@@ -1,7 +1,7 @@
 import asyncio
 import json
-import logging
 import os
+import logging
 from datetime import datetime
 
 from aiogram import Bot, Dispatcher, F
@@ -17,7 +17,6 @@ from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# SIZNING ADMIN ID
 ADMIN_IDS = [8338181464]
 
 PRODUCTS_FILE = "products.json"
@@ -27,7 +26,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 # ============================================================
-# MA'LUMOTLARNI YUKLASH / SAQLASH
+# MA'LUMOTLAR
 # ============================================================
 
 def load_json(filename, default):
@@ -43,7 +42,12 @@ def load_json(filename, default):
 
 def save_json(filename, data):
     with open(filename, "w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False, indent=4)
+        json.dump(
+            data,
+            file,
+            ensure_ascii=False,
+            indent=4
+        )
 
 
 products = load_json(PRODUCTS_FILE, {})
@@ -90,10 +94,13 @@ def admin_menu():
             ],
             [
                 KeyboardButton(text="🧾 Kunlik kassa"),
-                KeyboardButton(text="💸 Rasxod"),
+                KeyboardButton(text="🔓 Kassani ochish"),
             ],
             [
+                KeyboardButton(text="💸 Rasxod"),
                 KeyboardButton(text="🔒 Kassani yopish"),
+            ],
+            [
                 KeyboardButton(text="📅 Eski kassalar"),
             ],
         ],
@@ -111,7 +118,7 @@ def cancel_keyboard():
 
 
 # ============================================================
-# FSM
+# FSM HOLATLARI
 # ============================================================
 
 class AddProduct(StatesGroup):
@@ -130,17 +137,13 @@ class DeleteProduct(StatesGroup):
     product = State()
 
 
-class CashStart(StatesGroup):
+class OpenCash(StatesGroup):
     amount = State()
     note = State()
 
 
 class Expense(StatesGroup):
     amount = State()
-    note = State()
-
-
-class CashNote(StatesGroup):
     note = State()
 
 
@@ -151,7 +154,9 @@ class CashNote(StatesGroup):
 @dp.message(CommandStart())
 async def start(message: Message):
     if not is_admin(message.from_user.id):
-        await message.answer("❌ Sizda admin huquqi yo'q.")
+        await message.answer(
+            "❌ Sizda admin huquqi yo'q."
+        )
         return
 
     await message.answer(
@@ -166,7 +171,10 @@ async def start(message: Message):
 # ============================================================
 
 @dp.message(F.text == "➕ Tovar qo'shish")
-async def add_product_start(message: Message, state: FSMContext):
+async def add_product_start(
+    message: Message,
+    state: FSMContext
+):
     if not is_admin(message.from_user.id):
         return
 
@@ -181,7 +189,10 @@ async def add_product_start(message: Message, state: FSMContext):
 
 
 @dp.message(AddProduct.name)
-async def add_product_name(message: Message, state: FSMContext):
+async def add_product_name(
+    message: Message,
+    state: FSMContext
+):
     if message.text == "❌ Bekor qilish":
         await state.clear()
         await message.answer(
@@ -193,29 +204,39 @@ async def add_product_name(message: Message, state: FSMContext):
     name = (message.text or "").strip()
 
     if not name:
-        await message.answer("❌ Tovar nomini kiriting.")
+        await message.answer(
+            "❌ Tovar nomini kiriting."
+        )
         return
 
     if name in products:
         await message.answer(
-            "❌ Bu nomdagi tovar allaqachon mavjud."
+            "❌ Bu nomdagi tovar allaqachon mavjud.\n"
+            "Boshqa nom kiriting."
         )
         return
 
     await state.update_data(name=name)
-    await state.set_state(AddProduct.initial_quantity)
+    await state.set_state(
+        AddProduct.initial_quantity
+    )
 
     await message.answer(
         f"📦 {name}\n\n"
-        "Boshlang'ich miqdorni kiriting:\n\n"
+        "Boshlang'ich miqdorni kiriting.\n\n"
         "Masalan: 10"
     )
 
 
 @dp.message(AddProduct.initial_quantity)
-async def add_product_quantity(message: Message, state: FSMContext):
+async def add_product_quantity(
+    message: Message,
+    state: FSMContext
+):
     try:
-        quantity = int((message.text or "").strip())
+        quantity = int(
+            (message.text or "").strip()
+        )
 
         if quantity < 0:
             raise ValueError
@@ -227,8 +248,13 @@ async def add_product_quantity(message: Message, state: FSMContext):
         )
         return
 
-    await state.update_data(initial_quantity=quantity)
-    await state.set_state(AddProduct.cost_price)
+    await state.update_data(
+        initial_quantity=quantity
+    )
+
+    await state.set_state(
+        AddProduct.cost_price
+    )
 
     await message.answer(
         "💵 Tannarxni kiriting.\n\n"
@@ -237,10 +263,15 @@ async def add_product_quantity(message: Message, state: FSMContext):
 
 
 @dp.message(AddProduct.cost_price)
-async def add_product_cost(message: Message, state: FSMContext):
+async def add_product_cost(
+    message: Message,
+    state: FSMContext
+):
     try:
         cost = float(
-            (message.text or "").replace(",", ".").strip()
+            (message.text or "")
+            .replace(",", ".")
+            .strip()
         )
 
         if cost < 0:
@@ -253,8 +284,13 @@ async def add_product_cost(message: Message, state: FSMContext):
         )
         return
 
-    await state.update_data(cost_price=cost)
-    await state.set_state(AddProduct.selling_price)
+    await state.update_data(
+        cost_price=cost
+    )
+
+    await state.set_state(
+        AddProduct.selling_price
+    )
 
     await message.answer(
         "💰 Sotuv narxini kiriting.\n\n"
@@ -269,7 +305,9 @@ async def add_product_selling(
 ):
     try:
         selling = float(
-            (message.text or "").replace(",", ".").strip()
+            (message.text or "")
+            .replace(",", ".")
+            .strip()
         )
 
         if selling < 0:
@@ -295,17 +333,24 @@ async def add_product_selling(
         "selling_price": selling,
     }
 
-    save_json(PRODUCTS_FILE, products)
+    save_json(
+        PRODUCTS_FILE,
+        products
+    )
 
     await state.clear()
 
     await message.answer(
         "✅ Tovar muvaffaqiyatli qo'shildi!\n\n"
         f"📦 Tovar: {name}\n"
-        f"📥 Boshlang'ich: {initial_quantity} dona\n"
-        f"📦 Qoldiq: {initial_quantity} dona\n"
-        f"💵 Tannarx: {cost_price:,.0f} so'm\n"
-        f"💰 Sotuv narxi: {selling:,.0f} so'm",
+        f"📥 Boshlang'ich: "
+        f"{initial_quantity} dona\n"
+        f"📦 Qoldiq: "
+        f"{initial_quantity} dona\n"
+        f"💵 Tannarx: "
+        f"{cost_price:,.0f} so'm\n"
+        f"💰 Sotuv narxi: "
+        f"{selling:,.0f} so'm",
         reply_markup=admin_menu(),
     )
 
@@ -330,12 +375,16 @@ async def remaining_start(
 
     text = "📦 Tovarni tanlang:\n\n"
 
-    for i, name in enumerate(products.keys(), 1):
+    for i, name in enumerate(
+        products.keys(),
+        1
+    ):
         item = products[name]
 
         text += (
             f"{i}. {name} — "
-            f"qoldiq: {item['remaining_quantity']} dona\n"
+            f"qoldiq: "
+            f"{item['remaining_quantity']} dona\n"
         )
 
     text += (
@@ -343,7 +392,9 @@ async def remaining_start(
         "Masalan: Sosiska"
     )
 
-    await state.set_state(RemainingProduct.product)
+    await state.set_state(
+        RemainingProduct.product
+    )
 
     await message.answer(
         text,
@@ -372,15 +423,23 @@ async def remaining_product(
         )
         return
 
-    await state.update_data(product=name)
-    await state.set_state(RemainingProduct.remaining)
+    await state.update_data(
+        product=name
+    )
 
-    old_remaining = products[name]["remaining_quantity"]
+    await state.set_state(
+        RemainingProduct.remaining
+    )
+
+    old_remaining = products[name][
+        "remaining_quantity"
+    ]
 
     await message.answer(
         f"📦 {name}\n\n"
-        f"Oldingi qoldiq: {old_remaining} dona\n\n"
-        "Hozir nechta qolganini kiriting:"
+        f"Oldingi qoldiq: "
+        f"{old_remaining} dona\n\n"
+        "Hozir nechta qolganini kiriting."
     )
 
 
@@ -390,7 +449,9 @@ async def remaining_value(
     state: FSMContext
 ):
     try:
-        remaining = int((message.text or "").strip())
+        remaining = int(
+            (message.text or "").strip()
+        )
 
         if remaining < 0:
             raise ValueError
@@ -404,25 +465,38 @@ async def remaining_value(
     data = await state.get_data()
 
     name = data["product"]
+
     product = products[name]
 
-    initial = product["initial_quantity"]
+    initial = product[
+        "initial_quantity"
+    ]
 
     if remaining > initial:
         await message.answer(
-            "❌ Qoldiq boshlang'ich miqdordan "
-            "ko'p bo'lishi mumkin emas."
+            "❌ Qoldiq boshlang'ich "
+            "miqdordan ko'p bo'lishi mumkin emas."
         )
         return
 
     sold = initial - remaining
 
-    product["remaining_quantity"] = remaining
+    product[
+        "remaining_quantity"
+    ] = remaining
 
-    save_json(PRODUCTS_FILE, products)
+    save_json(
+        PRODUCTS_FILE,
+        products
+    )
 
-    cost_price = product["cost_price"]
-    selling_price = product["selling_price"]
+    cost_price = product[
+        "cost_price"
+    ]
+
+    selling_price = product[
+        "selling_price"
+    ]
 
     revenue = sold * selling_price
     total_cost = sold * cost_price
@@ -433,13 +507,20 @@ async def remaining_value(
     await message.answer(
         "✅ Qoldiq saqlandi!\n\n"
         f"📦 Tovar: {name}\n"
-        f"📥 Boshlang'ich: {initial} dona\n"
-        f"📦 Qoldiq: {remaining} dona\n"
-        f"📤 Sotilgan: {sold} dona\n\n"
-        f"💵 Tannarx: {cost_price:,.0f} so'm\n"
-        f"💰 Sotuv narxi: {selling_price:,.0f} so'm\n"
-        f"💰 Tushum: {revenue:,.0f} so'm\n"
-        f"📈 Foyda: {profit:,.0f} so'm",
+        f"📥 Boshlang'ich: "
+        f"{initial} dona\n"
+        f"📦 Qoldiq: "
+        f"{remaining} dona\n"
+        f"📤 Sotilgan: "
+        f"{sold} dona\n\n"
+        f"💵 Tannarx: "
+        f"{cost_price:,.0f} so'm\n"
+        f"💰 Sotuv narxi: "
+        f"{selling_price:,.0f} so'm\n"
+        f"💰 Tushum: "
+        f"{revenue:,.0f} so'm\n"
+        f"📈 Foyda: "
+        f"{profit:,.0f} so'm",
         reply_markup=admin_menu(),
     )
 
@@ -454,14 +535,22 @@ async def sklad(message: Message):
         return
 
     if not products:
-        await message.answer("📦 Sklad bo'sh.")
+        await message.answer(
+            "📦 Sklad bo'sh."
+        )
         return
 
     text = "📦 SKLAD\n\n"
 
     for name, item in products.items():
-        initial = item["initial_quantity"]
-        remaining = item["remaining_quantity"]
+        initial = item[
+            "initial_quantity"
+        ]
+
+        remaining = item[
+            "remaining_quantity"
+        ]
+
         sold = initial - remaining
 
         text += (
@@ -469,8 +558,10 @@ async def sklad(message: Message):
             f"📥 Kirim: {initial} dona\n"
             f"📤 Sotilgan: {sold} dona\n"
             f"📦 Qoldiq: {remaining} dona\n"
-            f"💵 Tannarx: {item['cost_price']:,.0f} so'm\n"
-            f"💰 Sotuv: {item['selling_price']:,.0f} so'm\n\n"
+            f"💵 Tannarx: "
+            f"{item['cost_price']:,.0f} so'm\n"
+            f"💰 Sotuv: "
+            f"{item['selling_price']:,.0f} so'm\n\n"
         )
 
     await message.answer(text)
@@ -499,8 +590,14 @@ async def report(message: Message):
     text = "📊 UMUMIY HISOBOT\n\n"
 
     for name, item in products.items():
-        initial = item["initial_quantity"]
-        remaining = item["remaining_quantity"]
+        initial = item[
+            "initial_quantity"
+        ]
+
+        remaining = item[
+            "remaining_quantity"
+        ]
+
         sold = initial - remaining
 
         cost = item["cost_price"]
@@ -517,20 +614,29 @@ async def report(message: Message):
 
         text += (
             f"🔹 {name}\n"
-            f"📥 Boshlang'ich: {initial} dona\n"
-            f"📤 Sotilgan: {sold} dona\n"
-            f"📦 Qoldiq: {remaining} dona\n"
-            f"💰 Tushum: {revenue:,.0f} so'm\n"
-            f"📈 Foyda: {profit:,.0f} so'm\n\n"
+            f"📥 Boshlang'ich: "
+            f"{initial} dona\n"
+            f"📤 Sotilgan: "
+            f"{sold} dona\n"
+            f"📦 Qoldiq: "
+            f"{remaining} dona\n"
+            f"💰 Tushum: "
+            f"{revenue:,.0f} so'm\n"
+            f"📈 Foyda: "
+            f"{profit:,.0f} so'm\n\n"
         )
 
     text += (
         "━━━━━━━━━━━━━━\n"
         "📊 JAMI\n\n"
-        f"📤 Jami sotilgan: {total_sold} dona\n"
-        f"💰 Jami tushum: {total_revenue:,.0f} so'm\n"
-        f"🧾 Jami tannarx: {total_cost:,.0f} so'm\n"
-        f"📈 Jami foyda: {total_profit:,.0f} so'm"
+        f"📤 Jami sotilgan: "
+        f"{total_sold} dona\n"
+        f"💰 Jami tushum: "
+        f"{total_revenue:,.0f} so'm\n"
+        f"🧾 Jami tannarx: "
+        f"{total_cost:,.0f} so'm\n"
+        f"📈 Jami foyda: "
+        f"{total_profit:,.0f} so'm"
     )
 
     await message.answer(text)
@@ -556,8 +662,14 @@ async def profit_report(message: Message):
     text = "💰 FOYDA HISOBOTI\n\n"
 
     for name, item in products.items():
-        initial = item["initial_quantity"]
-        remaining = item["remaining_quantity"]
+        initial = item[
+            "initial_quantity"
+        ]
+
+        remaining = item[
+            "remaining_quantity"
+        ]
+
         sold = initial - remaining
 
         cost = item["cost_price"]
@@ -571,15 +683,20 @@ async def profit_report(message: Message):
 
         text += (
             f"🔹 {name}\n"
-            f"📤 Sotilgan: {sold} dona\n"
-            f"💵 Tannarx: {total_cost:,.0f} so'm\n"
-            f"💰 Tushum: {revenue:,.0f} so'm\n"
-            f"📈 Foyda: {profit:,.0f} so'm\n\n"
+            f"📤 Sotilgan: "
+            f"{sold} dona\n"
+            f"💵 Tannarx: "
+            f"{total_cost:,.0f} so'm\n"
+            f"💰 Tushum: "
+            f"{revenue:,.0f} so'm\n"
+            f"📈 Foyda: "
+            f"{profit:,.0f} so'm\n\n"
         )
 
     text += (
         "━━━━━━━━━━━━━━\n"
-        f"💰 JAMI FOYDA: {total_profit:,.0f} so'm"
+        f"💰 JAMI FOYDA: "
+        f"{total_profit:,.0f} so'm"
     )
 
     await message.answer(text)
@@ -603,12 +720,17 @@ async def delete_start(
         )
         return
 
-    text = "🗑 O'chirmoqchi bo'lgan tovar nomini yozing:\n\n"
+    text = (
+        "🗑 O'chirmoqchi bo'lgan "
+        "tovar nomini yozing:\n\n"
+    )
 
     for name in products:
         text += f"🔹 {name}\n"
 
-    await state.set_state(DeleteProduct.product)
+    await state.set_state(
+        DeleteProduct.product
+    )
 
     await message.answer(
         text,
@@ -639,7 +761,10 @@ async def delete_product(
 
     del products[name]
 
-    save_json(PRODUCTS_FILE, products)
+    save_json(
+        PRODUCTS_FILE,
+        products
+    )
 
     await state.clear()
 
@@ -650,59 +775,54 @@ async def delete_product(
 
 
 # ============================================================
-# 🧾 KUNLIK KASSA
+# 🔓 KASSANI OCHISH
 # ============================================================
 
-@dp.message(F.text == "🧾 Kunlik kassa")
-async def daily_cash_start(
+@dp.message(F.text == "🔓 Kassani ochish")
+async def open_cash_start(
     message: Message,
     state: FSMContext
 ):
     if not is_admin(message.from_user.id):
         return
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now().strftime(
+        "%Y-%m-%d"
+    )
 
-    if today in cash_data and cash_data[today].get("closed"):
-        await message.answer(
-            f"🔒 Bugungi kassa allaqachon yopilgan.\n\n"
-            f"📅 Sana: {today}\n\n"
-            "Agar eski kassalarni ko'rmoqchi bo'lsangiz:\n"
-            "📅 Eski kassalar tugmasini bosing."
-        )
-        return
-
+    # Agar bugungi kassa mavjud bo'lsa
     if today in cash_data:
-        data = cash_data[today]
+        if cash_data[today].get("closed"):
+            await message.answer(
+                "🔒 Bugungi kassa allaqachon yopilgan.\n\n"
+                f"📅 Sana: {today}\n\n"
+                "Yopilgan kassani qayta ochib bo'lmaydi."
+            )
+            return
 
         await message.answer(
-            "🧾 BUGUNGI KASSA\n\n"
-            f"📅 Sana: {today}\n"
-            f"💵 Boshlang'ich kassa: "
-            f"{data.get('opening_cash', 0):,.0f} so'm\n"
-            f"💰 Tushum: "
-            f"{data.get('revenue', 0):,.0f} so'm\n"
-            f"💸 Rasxod: "
-            f"{data.get('expenses_total', 0):,.0f} so'm\n"
-            f"💵 Kassa oxiri: "
-            f"{data.get('closing_cash', 0):,.0f} so'm\n\n"
-            f"📝 Izoh: {data.get('note', 'Izoh yo‘q')}"
+            "🟢 Bugungi kassa allaqachon ochilgan.\n\n"
+            "🧾 Kunlik kassa tugmasi orqali "
+            "holatini ko'rishingiz mumkin."
         )
         return
 
-    await state.set_state(CashStart.amount)
+    await state.set_state(
+        OpenCash.amount
+    )
 
     await message.answer(
-        "🧾 KUNLIK KASSA\n\n"
-        "Bugungi boshlang'ich kassani kiriting.\n\n"
+        "🔓 KASSANI OCHISH\n\n"
+        f"📅 Sana: {today}\n\n"
+        "Boshlang'ich kassa summasini kiriting.\n\n"
         "Masalan:\n"
         "500000",
         reply_markup=cancel_keyboard(),
     )
 
 
-@dp.message(CashStart.amount)
-async def cash_start_amount(
+@dp.message(OpenCash.amount)
+async def open_cash_amount(
     message: Message,
     state: FSMContext
 ):
@@ -716,7 +836,9 @@ async def cash_start_amount(
 
     try:
         amount = float(
-            (message.text or "").replace(",", ".").strip()
+            (message.text or "")
+            .replace(",", ".")
+            .strip()
         )
 
         if amount < 0:
@@ -729,8 +851,13 @@ async def cash_start_amount(
         )
         return
 
-    await state.update_data(opening_cash=amount)
-    await state.set_state(CashStart.note)
+    await state.update_data(
+        opening_cash=amount
+    )
+
+    await state.set_state(
+        OpenCash.note
+    )
 
     await message.answer(
         "📝 Kassa izohini kiriting.\n\n"
@@ -741,8 +868,8 @@ async def cash_start_amount(
     )
 
 
-@dp.message(CashStart.note)
-async def cash_start_note(
+@dp.message(OpenCash.note)
+async def open_cash_note(
     message: Message,
     state: FSMContext
 ):
@@ -756,36 +883,150 @@ async def cash_start_note(
 
     note = (message.text or "").strip()
 
-    if note.lower() == "yo'q":
+    if note.lower() in [
+        "yo'q",
+        "yoq",
+        "-"
+    ]:
         note = ""
 
     data = await state.get_data()
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now().strftime(
+        "%Y-%m-%d"
+    )
 
     cash_data[today] = {
         "date": today,
-        "opening_cash": data["opening_cash"],
+        "opening_cash": data[
+            "opening_cash"
+        ],
         "revenue": 0,
         "expenses": [],
         "expenses_total": 0,
-        "closing_cash": data["opening_cash"],
+        "closing_cash": data[
+            "opening_cash"
+        ],
         "note": note,
         "closed": False,
+        "opened_time": datetime.now().strftime(
+            "%H:%M:%S"
+        ),
     }
 
-    save_json(CASH_FILE, cash_data)
+    save_json(
+        CASH_FILE,
+        cash_data
+    )
 
     await state.clear()
 
     await message.answer(
-        "✅ Kassa ochildi!\n\n"
+        "✅ KASSA OCHILDI!\n\n"
         f"📅 Sana: {today}\n"
         f"💵 Boshlang'ich kassa: "
         f"{data['opening_cash']:,.0f} so'm\n"
-        f"📝 Izoh: {note or 'Izoh yo‘q'}",
+        f"📝 Izoh: "
+        f"{note or 'Izoh yo‘q'}",
         reply_markup=admin_menu(),
     )
+
+
+# ============================================================
+# 🧾 KUNLIK KASSA
+# ============================================================
+
+@dp.message(F.text == "🧾 Kunlik kassa")
+async def daily_cash(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    today = datetime.now().strftime(
+        "%Y-%m-%d"
+    )
+
+    if today not in cash_data:
+        await message.answer(
+            "❌ Bugungi kassa hali ochilmagan.\n\n"
+            "Avval:\n"
+            "🔓 Kassani ochish\n"
+            "tugmasini bosing."
+        )
+        return
+
+    data = cash_data[today]
+
+    revenue = calculate_today_revenue()
+
+    expenses_total = data.get(
+        "expenses_total",
+        0
+    )
+
+    opening_cash = data.get(
+        "opening_cash",
+        0
+    )
+
+    closing_cash = (
+        opening_cash
+        + revenue
+        - expenses_total
+    )
+
+    status = (
+        "🔒 Yopilgan"
+        if data.get("closed")
+        else "🟢 Ochiq"
+    )
+
+    await message.answer(
+        "🧾 KUNLIK KASSA\n\n"
+        f"📅 Sana: {today}\n"
+        f"{status}\n\n"
+        f"💵 Boshlang'ich kassa: "
+        f"{opening_cash:,.0f} so'm\n"
+        f"💰 Tushum: "
+        f"{revenue:,.0f} so'm\n"
+        f"💸 Rasxod: "
+        f"{expenses_total:,.0f} so'm\n"
+        f"💵 Kassa oxiri: "
+        f"{closing_cash:,.0f} so'm\n\n"
+        f"📝 Izoh: "
+        f"{data.get('note') or 'Izoh yo‘q'}"
+    )
+
+
+# ============================================================
+# TUSHUMNI HISOBLASH
+# ============================================================
+
+def calculate_today_revenue():
+    revenue = 0
+
+    for item in products.values():
+        initial = item.get(
+            "initial_quantity",
+            0
+        )
+
+        remaining = item.get(
+            "remaining_quantity",
+            0
+        )
+
+        sold = initial - remaining
+
+        if sold > 0:
+            revenue += (
+                sold
+                * item.get(
+                    "selling_price",
+                    0
+                )
+            )
+
+    return revenue
 
 
 # ============================================================
@@ -800,23 +1041,27 @@ async def expense_start(
     if not is_admin(message.from_user.id):
         return
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now().strftime(
+        "%Y-%m-%d"
+    )
 
     if today not in cash_data:
         await message.answer(
-            "❌ Avval bugungi kassani oching.\n\n"
-            "🧾 Kunlik kassa tugmasini bosing."
+            "❌ Avval kassani oching.\n\n"
+            "🔓 Kassani ochish tugmasini bosing."
         )
         return
 
     if cash_data[today].get("closed"):
         await message.answer(
-            "🔒 Bugungi kassa yopilgan.\n"
+            "🔒 Bugungi kassa yopilgan.\n\n"
             "Yopilgan kassaga rasxod qo'shib bo'lmaydi."
         )
         return
 
-    await state.set_state(Expense.amount)
+    await state.set_state(
+        Expense.amount
+    )
 
     await message.answer(
         "💸 RASXOD\n\n"
@@ -842,7 +1087,9 @@ async def expense_amount(
 
     try:
         amount = float(
-            (message.text or "").replace(",", ".").strip()
+            (message.text or "")
+            .replace(",", ".")
+            .strip()
         )
 
         if amount <= 0:
@@ -855,8 +1102,13 @@ async def expense_amount(
         )
         return
 
-    await state.update_data(amount=amount)
-    await state.set_state(Expense.note)
+    await state.update_data(
+        amount=amount
+    )
+
+    await state.set_state(
+        Expense.note
+    )
 
     await message.answer(
         "📝 Rasxod izohini kiriting.\n\n"
@@ -884,7 +1136,9 @@ async def expense_note(
 
     amount = data["amount"]
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now().strftime(
+        "%Y-%m-%d"
+    )
 
     if today not in cash_data:
         await state.clear()
@@ -897,26 +1151,42 @@ async def expense_note(
     expense_item = {
         "amount": amount,
         "note": note,
-        "time": datetime.now().strftime("%H:%M:%S"),
+        "time": datetime.now().strftime(
+            "%H:%M:%S"
+        ),
     }
 
-    cash_data[today].setdefault("expenses", [])
-    cash_data[today]["expenses"].append(expense_item)
-
-    cash_data[today]["expenses_total"] = sum(
-        item["amount"]
-        for item in cash_data[today]["expenses"]
+    cash_data[today].setdefault(
+        "expenses",
+        []
     )
 
-    save_json(CASH_FILE, cash_data)
+    cash_data[today][
+        "expenses"
+    ].append(expense_item)
+
+    cash_data[today][
+        "expenses_total"
+    ] = sum(
+        item["amount"]
+        for item in cash_data[today][
+            "expenses"
+        ]
+    )
+
+    save_json(
+        CASH_FILE,
+        cash_data
+    )
 
     await state.clear()
 
     await message.answer(
-        "✅ Rasxod saqlandi!\n\n"
-        f"💸 Summa: {amount:,.0f} so'm\n"
+        "✅ RASXOD SAQLANDI!\n\n"
+        f"💸 Summa: "
+        f"{amount:,.0f} so'm\n"
         f"📝 Izoh: {note}\n\n"
-        f"💸 Jami bugungi rasxod: "
+        f"💸 Bugungi jami rasxod: "
         f"{cash_data[today]['expenses_total']:,.0f} so'm",
         reply_markup=admin_menu(),
     )
@@ -931,7 +1201,9 @@ async def close_cash(message: Message):
     if not is_admin(message.from_user.id):
         return
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now().strftime(
+        "%Y-%m-%d"
+    )
 
     if today not in cash_data:
         await message.answer(
@@ -945,26 +1217,20 @@ async def close_cash(message: Message):
         )
         return
 
-    # Tovarlar bo'yicha bugungi tushumni hisoblash
-    revenue = 0
+    revenue = calculate_today_revenue()
 
-    for item in products.values():
-        initial = item.get("initial_quantity", 0)
-        remaining = item.get("remaining_quantity", 0)
-
-        sold = initial - remaining
-
-        if sold > 0:
-            revenue += sold * item.get(
-                "selling_price", 0
-            )
-
-    expenses_total = cash_data[today].get(
-        "expenses_total", 0
+    expenses_total = cash_data[
+        today
+    ].get(
+        "expenses_total",
+        0
     )
 
-    opening_cash = cash_data[today].get(
-        "opening_cash", 0
+    opening_cash = cash_data[
+        today
+    ].get(
+        "opening_cash",
+        0
     )
 
     closing_cash = (
@@ -973,14 +1239,28 @@ async def close_cash(message: Message):
         - expenses_total
     )
 
-    cash_data[today]["revenue"] = revenue
-    cash_data[today]["closing_cash"] = closing_cash
-    cash_data[today]["closed"] = True
-    cash_data[today]["closed_time"] = datetime.now().strftime(
+    cash_data[today][
+        "revenue"
+    ] = revenue
+
+    cash_data[today][
+        "closing_cash"
+    ] = closing_cash
+
+    cash_data[today][
+        "closed"
+    ] = True
+
+    cash_data[today][
+        "closed_time"
+    ] = datetime.now().strftime(
         "%H:%M:%S"
     )
 
-    save_json(CASH_FILE, cash_data)
+    save_json(
+        CASH_FILE,
+        cash_data
+    )
 
     await message.answer(
         "🔒 KASSA YOPILDI!\n\n"
@@ -994,7 +1274,8 @@ async def close_cash(message: Message):
         f"💵 Kassa oxiri: "
         f"{closing_cash:,.0f} so'm\n\n"
         f"📝 Izoh: "
-        f"{cash_data[today].get('note') or 'Izoh yo‘q'}"
+        f"{cash_data[today].get('note') or 'Izoh yo‘q'}",
+        reply_markup=admin_menu(),
     )
 
 
@@ -1040,7 +1321,7 @@ async def old_cash_reports(message: Message):
             f"{data.get('closing_cash', 0):,.0f} so'm\n"
             f"📝 Izoh: "
             f"{data.get('note') or 'Izoh yo‘q'}\n"
-            f"━━━━━━━━━━━━━━\n"
+            "━━━━━━━━━━━━━━\n"
         )
 
     await message.answer(text)
@@ -1068,7 +1349,10 @@ async def cancel_all(
 # ============================================================
 
 async def main():
-    print("🤖 Golden Hisobot bot ishga tushdi...")
+    print(
+        "🤖 Golden Hisobot bot ishga tushdi..."
+    )
+
     await dp.start_polling(bot)
 
 
