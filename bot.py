@@ -82,7 +82,7 @@ def admin_menu():
         keyboard=[
             [
                 KeyboardButton(text="➕ Tovar qo'shish"),
-                KeyboardButton(text="📦 Sklad"),
+                KeyboardButton(text="📥 Skladga qo'shish"),
             ],
             [
                 KeyboardButton(text="📉 Qoldiqni kiritish"),
@@ -138,6 +138,11 @@ class AddProduct(StatesGroup):
 class RemainingProduct(StatesGroup):
     product = State()
     remaining = State()
+
+
+class AddStock(StatesGroup):
+    product = State()
+    quantity = State()
 
 
 class DeleteProduct(StatesGroup):
@@ -379,6 +384,87 @@ async def add_product_selling(
 
 
 # ============================================================
+# SKLADGA QO'SHISH
+# ============================================================
+
+@dp.message(F.text == "📥 Skladga qo'shish")
+async def add_stock_start(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+
+    if not products:
+        await message.answer("📦 Hozircha tovarlar mavjud emas.")
+        return
+
+    text = "📦 Skladga qo'shiladigan tovarni tanlang:\n\n"
+    for i, name in enumerate(products.keys(), 1):
+        item = products[name]
+        text += f"{i}. {name} — qoldiq: {item['remaining_quantity']} dona\n"
+
+    text += "\nTovar nomini aynan yozing.\nMasalan: Sosiska"
+
+    await state.set_state(AddStock.product)
+    await message.answer(text, reply_markup=cancel_keyboard())
+
+
+@dp.message(AddStock.product)
+async def add_stock_product(message: Message, state: FSMContext):
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
+        await message.answer("Bekor qilindi.", reply_markup=admin_menu())
+        return
+
+    name = (message.text or "").strip()
+    if name not in products:
+        await message.answer("❌ Bunday tovar topilmadi.")
+        return
+
+    await state.update_data(product=name)
+    await state.set_state(AddStock.quantity)
+    await message.answer(
+        f"📦 {name}\n\nQancha dona qo'shasiz?\nMasalan: 10",
+        reply_markup=cancel_keyboard(),
+    )
+
+
+@dp.message(AddStock.quantity)
+async def add_stock_quantity(message: Message, state: FSMContext):
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
+        await message.answer("Bekor qilindi.", reply_markup=admin_menu())
+        return
+
+    try:
+        quantity = int((message.text or "").strip())
+    except ValueError:
+        await message.answer("❌ Miqdorni faqat son bilan kiriting. Masalan: 10")
+        return
+
+    if quantity <= 0:
+        await message.answer("❌ Miqdor 0 dan katta bo'lishi kerak.")
+        return
+
+    data = await state.get_data()
+    name = data["product"]
+    item = products[name]
+
+    # Yangi kirimni ham boshlang'ich miqdorga, ham qoldiqqa qo'shamiz.
+    # Shunda avval sotilgan tovarlar soni o'zgarmaydi.
+    item["initial_quantity"] += quantity
+    item["remaining_quantity"] += quantity
+    save_json(PRODUCTS_FILE, products)
+
+    await state.clear()
+    await message.answer(
+        "✅ Skladga qo'shildi!\n\n"
+        f"📦 Tovar: {name}\n"
+        f"➕ Qo'shildi: {quantity} dona\n"
+        f"📦 Yangi qoldiq: {item['remaining_quantity']} dona",
+        reply_markup=admin_menu(),
+    )
+
+
+# ============================================================
 # QOLDIQNI KIRITISH
 # ============================================================
 
@@ -546,48 +632,6 @@ async def remaining_value(
         f"{profit:,.0f} so'm",
         reply_markup=admin_menu(),
     )
-
-
-# ============================================================
-# SKLAD
-# ============================================================
-
-@dp.message(F.text == "📦 Sklad")
-async def sklad(message: Message):
-    if not is_admin(message.from_user.id):
-        return
-
-    if not products:
-        await message.answer(
-            "📦 Sklad bo'sh."
-        )
-        return
-
-    text = "📦 SKLAD\n\n"
-
-    for name, item in products.items():
-        initial = item[
-            "initial_quantity"
-        ]
-
-        remaining = item[
-            "remaining_quantity"
-        ]
-
-        sold = initial - remaining
-
-        text += (
-            f"🔹 {name}\n"
-            f"📥 Kirim: {initial} dona\n"
-            f"📤 Sotilgan: {sold} dona\n"
-            f"📦 Qoldiq: {remaining} dona\n"
-            f"💵 Tannarx: "
-            f"{item['cost_price']:,.0f} so'm\n"
-            f"💰 Sotuv: "
-            f"{item['selling_price']:,.0f} so'm\n\n"
-        )
-
-    await message.answer(text)
 
 
 # ============================================================
