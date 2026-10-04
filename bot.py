@@ -85,6 +85,9 @@ def admin_menu():
                 KeyboardButton(text="📥 Skladga qo'shish"),
             ],
             [
+                KeyboardButton(text="📦 Sklad"),
+            ],
+            [
                 KeyboardButton(text="📉 Qoldiqni kiritish"),
                 KeyboardButton(text="📊 Hisobot"),
             ],
@@ -462,6 +465,32 @@ async def add_stock_quantity(message: Message, state: FSMContext):
         f"📦 Yangi qoldiq: {item['remaining_quantity']} dona",
         reply_markup=admin_menu(),
     )
+
+
+# ============================================================
+# SKLAD
+# ============================================================
+
+@dp.message(F.text == "📦 Sklad")
+async def sklad(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    if not products:
+        await message.answer("📦 Sklad bo'sh.")
+        return
+
+    text = "📦 SKLAD QOLDIQLARI\n\n"
+    total_remaining = 0
+
+    for i, (name, item) in enumerate(products.items(), 1):
+        remaining = item.get("remaining_quantity", 0)
+        total_remaining += remaining
+        text += f"{i}. 🔹 {name} — 📦 Qoldiq: {remaining} dona\n"
+
+    text += f"\n📊 Jami qoldiq: {total_remaining} dona"
+
+    await message.answer(text, reply_markup=admin_menu())
 
 
 # ============================================================
