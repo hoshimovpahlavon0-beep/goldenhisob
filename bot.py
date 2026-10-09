@@ -155,7 +155,9 @@ class DeleteProduct(StatesGroup):
 class OpenCash(StatesGroup):
     amount = State()
     note = State()
-
+class CashFilterStates(StatesGroup):
+    start_date = State()
+    end_date = State()
 
 class Expense(StatesGroup):
     amount = State()
