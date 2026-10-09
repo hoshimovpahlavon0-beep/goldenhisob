@@ -1890,37 +1890,185 @@ async def close_cash(message: Message):
 
 
 # ============================================================
-# 📅 ESKI KASSALAR
+# 📅 KASSA FILTRLARI
 # ============================================================
 
 @dp.message(F.text == "📅 Eski kassalar")
-async def old_cash_reports(message: Message):
+async def old_cash_reports(
+    message: Message,
+    state: FSMContext
+):
     if not is_admin(message.from_user.id):
         return
 
-    if not cash_data:
+    await state.clear()
+
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📅 Bugun")],
+            [KeyboardButton(text="🗓 Sana oralig'i")],
+            [KeyboardButton(text="❌ Bekor qilish")],
+        ],
+        resize_keyboard=True,
+    )
+
+    await message.answer(
+        "📅 KASSA FILTRI\n\n"
+        "Kerakli filtrni tanlang:",
+        reply_markup=keyboard,
+    )
+
+
+# ============================================================
+# 📅 BUGUNGI KASSA
+# ============================================================
+
+@dp.message(F.text == "📅 Bugun")
+async def cash_filter_today(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    data = cash_data.get(today)
+
+    if not data:
+        await message.answer("❌ Bugungi kassa topilmadi.")
+        return
+
+    await message.answer(
+        f"📅 Sana: {today}\n"
+        f"💵 Boshlang'ich kassa: "
+        f"{data.get('opening_cash', 0):,.0f} so'm\n"
+        f"💰 Tushum: "
+        f"{data.get('revenue', 0):,.0f} so'm\n"
+        f"💸 Rasxod: "
+        f"{data.get('expenses_total', 0):,.0f} so'm\n"
+        f"💵 Kassa oxiri: "
+        f"{data.get('closing_cash', 0):,.0f} so'm\n"
+        f"📝 Izoh: {data.get('note') or 'Izoh yo‘q'}"
+    )
+
+
+# ============================================================
+# 🗓 SANA ORALIG'I
+# ============================================================
+
+@dp.message(F.text == "🗓 Sana oralig'i")
+async def cash_filter_start(
+    message: Message,
+    state: FSMContext
+):
+    if not is_admin(message.from_user.id):
+        return
+
+    await state.set_state(CashFilterStates.start_date)
+
+    await message.answer(
+        "🗓 Boshlanish sanasini kiriting.\n"
+        "Masalan: 01.10.2026"
+    )
+
+
+@dp.message(CashFilterStates.start_date)
+async def cash_filter_get_start(
+    message: Message,
+    state: FSMContext
+):
+    if not is_admin(message.from_user.id):
+        return
+
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
         await message.answer(
-            "📅 Hozircha saqlangan kassa yo'q."
+            "❌ Bekor qilindi.",
+            reply_markup=admin_menu(),
         )
         return
 
-    text = "📅 SAQLANGAN KASSALAR\n\n"
+    try:
+        start_date = datetime.strptime(
+            message.text.strip(), "%d.%m.%Y"
+        ).strftime("%Y-%m-%d")
+    except (ValueError, AttributeError):
+        await message.answer(
+            "❌ Sana noto'g'ri.\n"
+            "Masalan: 01.10.2026"
+        )
+        return
 
-    for date in sorted(
-        cash_data.keys(),
-        reverse=True
-    ):
+    await state.update_data(start_date=start_date)
+    await state.set_state(CashFilterStates.end_date)
+
+    await message.answer(
+        "🗓 Tugash sanasini kiriting.\n"
+        "Masalan: 09.10.2026"
+    )
+
+
+@dp.message(CashFilterStates.end_date)
+async def cash_filter_get_end(
+    message: Message,
+    state: FSMContext
+):
+    if not is_admin(message.from_user.id):
+        return
+
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
+        await message.answer(
+            "❌ Bekor qilindi.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    try:
+        end_date = datetime.strptime(
+            message.text.strip(), "%d.%m.%Y"
+        ).strftime("%Y-%m-%d")
+    except (ValueError, AttributeError):
+        await message.answer(
+            "❌ Sana noto'g'ri.\n"
+            "Masalan: 09.10.2026"
+        )
+        return
+
+    dates = await state.get_data()
+    start_date = dates["start_date"]
+
+    if start_date > end_date:
+        await state.clear()
+        await message.answer(
+            "❌ Boshlanish sanasi tugash sanasidan "
+            "keyin bo'lmasligi kerak.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    selected_dates = [
+        date for date in sorted(cash_data.keys(), reverse=True)
+        if start_date <= date <= end_date
+    ]
+
+    await state.clear()
+
+    if not selected_dates:
+        await message.answer(
+            f"❌ {start_date} — {end_date} oralig'ida "
+            "kassa topilmadi.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    report = (
+        f"📊 KASSA HISOBOTI\n"
+        f"📅 {start_date} — {end_date}\n\n"
+    )
+
+    for date in selected_dates:
         data = cash_data[date]
 
-        status = (
-            "🔒 Yopilgan"
-            if data.get("closed")
-            else "🟢 Ochiq"
-        )
-
-        text += (
-            f"📅 {date}\n"
-            f"{status}\n"
+        report += (
+            f"📅 Sana: {date}\n"
             f"💵 Boshlang'ich: "
             f"{data.get('opening_cash', 0):,.0f} so'm\n"
             f"💰 Tushum: "
@@ -1929,13 +2077,13 @@ async def old_cash_reports(message: Message):
             f"{data.get('expenses_total', 0):,.0f} so'm\n"
             f"💵 Kassa oxiri: "
             f"{data.get('closing_cash', 0):,.0f} so'm\n"
-            f"📝 Izoh: "
-            f"{data.get('note') or 'Izoh yo‘q'}\n"
             "━━━━━━━━━━━━━━\n"
         )
 
-    await message.answer(text)
-
+    await message.answer(
+        report,
+        reply_markup=admin_menu(),
+    )
 
 # ============================================================
 # ❌ BEKOR QILISH
